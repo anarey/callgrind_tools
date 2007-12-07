@@ -34,6 +34,7 @@
 #include <qstringlist.h>
 #include <qsettings.h>
 #include <qdir.h>
+#include <qtemporaryfile.h>
 
 QStringList readSourceFile(const QString &sourceFile)
 {
@@ -51,57 +52,84 @@ QStringList readSourceFile(const QString &sourceFile)
 
 int main(int argc, const char **argv)
 {
-    if (argc < 4) {
-        qWarning() << "usage:" << argv[0] << "callgrindFile sourceFile supressionFile";
+    if (argc < 3) {
+        qWarning() << "Usage:" << argv[0] << "callgrindFile sourceFile";
         return 1;
     }
 
     QString callgrindFile = argv[1];
     QString sourceFile = argv[2];
-    QString suppressionsFile = argv[3];
+    bool printAllLines = false;
+    if (argc == 4 && QString(argv[3]) == "--all")
+        printAllLines = true;
 
     if (!QFile::exists(sourceFile)) {
-        qWarning() << "source file don't exists";
+        qWarning() << "source file:" << sourceFile << "does not exists.";
         return 1;
     }
     if (!QFile::exists(callgrindFile)) {
-        qWarning() << "callgrind file don't exists";
+        qWarning() << "callgrind file:" << callgrindFile << "does not exists.";
         return 1;
     }
-    QFileInfo file(sourceFile);
-    QString sourceFileName = file.fileName();
+    QFileInfo fileinfo(sourceFile);
+    QString sourceFileName = fileinfo.fileName();
 
+    // For some reason the parser screws up the file name and line number
+    // if the header is part of the preprocessed file.  Copying it to temp
+    // solves that.  Fix if it becomes an issue
+    QTemporaryFile tempFile(QDir::tempPath() + "/XXXXXX_" + sourceFileName);
+    QFile file(sourceFile);
+    if (!tempFile.open() || !file.open(QFile::ReadOnly)) {
+        qWarning() << "Unable to open source file";
+        return 1;
+    }
+    tempFile.write(file.readAll());
+    tempFile.flush();
+
+    // Do it!
     CallgrindFile cf(callgrindFile);
     QList<int> touchedLines = cf.linesTouched(sourceFileName);
     QList<CallgrindFile::jump> jumps = cf.jumps(sourceFileName);
 
-    QDir::setCurrent(file.dir().absolutePath());
-    Compiler compiler(sourceFileName);
+    QDir::setCurrent(QFileInfo(tempFile.fileName()).dir().absolutePath());
+    Compiler compiler;
+    sourceFileName = QFileInfo(tempFile.fileName()).fileName();
+    if (!compiler.loadFile(sourceFileName))
+        return 1;
     QList<int> compiledLines = compiler.linesTouched(sourceFileName);
     QList<int> returns = compiler.returns(sourceFileName);
+    if (compiledLines.isEmpty()) {
+        qWarning() << "preprocessed source file is empty";
+        return 1;
+    }
     QList<QPair<int, int> > functions = compiler.functions(sourceFileName);
     QStringList sourceLines = readSourceFile(sourceFileName);
 
+    // Suppressions
+    // TODO make a suppressions file as an argument
     //QSettings suppressions(suppressionsFile, QSettings::IniFormat);
     //suppressions.setGroup("jumps");
     // keys = settings.value("jumps").toString().split(",");
-
     QString skip = ".*Q_ASSERT.*";
     for (int i = jumps.count() - 1; i >= 0; --i) {
         //qDebug() << jumps[i].from << sourceLines.value(jumps[i].from - 1) << jumps[i].to;
         if (sourceLines.value(jumps[i].from - 1).contains(QRegExp(skip)))
             jumps[i].fromCount = 1;
     }
-
     QList<int> skips;
     skip = ".*Q_UNUSED.*";
     for (int i = 0 ; i < sourceLines.count(); ++i) {
         if (sourceLines.value(i).contains(QRegExp(skip)))
             skips.append(i + 1);
     }
+    skip = ".*QT_.*_NAMESPACE.*";
+    for (int i = 0 ; i < sourceLines.count(); ++i) {
+        if (sourceLines.value(i).contains(QRegExp(skip)))
+            skips.append(i + 1);
+    }
 
+    // Output
     QTextStream out(stdout);
-
     out << "Function coverage - Has each function in the program been executed?" << endl;
     int touchedFunctions = 0;
     for (int i = 0; i < functions.count(); ++i) {
@@ -123,15 +151,11 @@ int main(int argc, const char **argv)
             //qDebug() << touchedLines.at(j);
         }
         if (start != -1)
-            out << "\tNot executed: " << sourceLines[start - 1] << endl;
+            out << "\tNot executed: " << start << " " << sourceLines[start - 1] << endl;
     }
-    out << "\tFunctions: " << touchedFunctions << "/" << functions.count()
+    out << "\tCoverage: " << touchedFunctions << "/" << functions.count()
         << " " << (int)((touchedFunctions/(double)functions.count()) * 100) << "%" << endl;
-
-
-    out << "Statement coverage - Has each line of the source code been executed?" << endl;
-    out << "\tExecuted: " << touchedLines.count() << "/" << compiledLines.count()
-        << " " << (int)((touchedLines.count()/(double)compiledLines.count()) * 100) << "%" << endl;
+    out << endl;
 
     out << "Condition coverage - Has each evaluation point (such as a true/false decision) been executed?" << endl;
     int touchedConditions = 0;
@@ -142,14 +166,44 @@ int main(int argc, const char **argv)
         else out << "\t" << "always true " << jumps[i].from << " " << jumps[i].fromCount << " " << jumps[i].to << " " << sourceLines[jumps[i].from - 1] << endl;
         //out << "\t" << jumps[i].from << " " << jumps[i].fromCount << " " << jumps[i].to << sourceLines[jumps[i].from - 1] << endl;
     }
-    out << "\tExecuted: " << touchedConditions << "/" << jumps.count()*2
-        << " " << (int)((touchedConditions/(double)(jumps.count()*2)) * 100) << "%" << endl;
+    out << "\tCoverage: " << touchedConditions << "/" << jumps.count()*2 << " ";
+    if (jumps.isEmpty())
+        out << "100";
+    else
+        out << (int)((touchedConditions/(double)(jumps.count())*2) * 100);
+    out << "%" << endl;
+    if (jumps.isEmpty())
+        qWarning() << "No jumps recorded, make sure you use --collect-jumps=yes as a callgrind option.";
+    out << endl;
 
     // Path coverage - Has every possible route through a given part of the code been executed?
     // Entry/exit coverage - Has every possible call and return of the function been executed?
 
-    out << endl;
+    {
+        QList<int> t = touchedLines;
+        QList<int> c = compiledLines;
+        qSort(t.begin(), t.end());
+        qSort(c.begin(), c.end());
+        for (int i = t.count() - 1; i >= 0; --i) {
+            int x = t[i];
+            if (!c.contains(x)) {
+                t.removeAt(i);
+            }
+        }
 
+        out << "Statement coverage - Has each line of the source code been executed?" << endl;
+        out << "\tCoverage: " << t.count() << "/" << c.count()
+            << " " << (int)((t.count()/(double)c.count()) * 100) << "%" << endl;
+    }
+    out << "-------------" << endl;
+    out << "Key:" << endl;
+    out << " c == compiled" << endl;
+    out << " e == executed" << endl;
+    out << " r == return" << endl;
+    out << " j == jump" << endl;
+    out << " s == skipped" << endl;
+    out << " - == comment/whitespace/not compiled" << endl;
+    out << "-------------" << endl;
     for (int i = 0; i < sourceLines.count(); ++i) {
         int lineNumber = i + 1;
         QString line = sourceLines[i];
@@ -188,19 +242,17 @@ int main(int argc, const char **argv)
 
         lineNumber++;
 
-        if ((!ran && !com) || ran || skip)
-            continue;
+        if (!printAllLines)
+            if ((!ran && !com) || ran || skip)
+                continue;
 
         out << lineNumber - 1
-            << " ["
-            << (rtn? "R" : "")
-            << (com? "c" : "")
-            << (jmp? "J" : "")
-            << (ran ? "t" : "")
+            << " \t["
+            << (rtn? "r" : "")
+            << (jmp? "j" : "")
             << (skip ? "s" : "")
-            << "]\t"
-            << (ran ? "t" :
-                com ? "c" : "-") << ": " << line << endl;
+            << (ran ? "e" :
+                com ? "c" : "-") << "]: " << line << endl;
     }
 
     return 0;

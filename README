@@ -21,8 +21,8 @@ callgrind_info
  
 callgrind_coverage
   Given a callgrind file and a source file, callgrind_coverage will output
-  the code coverage of the the callgrind file over the source file including
-  jumps.
+  the code coverage of the callgrind file over the source file including
+  jumps. Make sure when using valgrind you use --collect-jumps=yes
 
 More information about callgrind can be found on the valgrind website: http://valgrind.org
 
