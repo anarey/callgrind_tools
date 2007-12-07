@@ -30,7 +30,7 @@
 #include <qtextstream.h>
 #include <qdebug.h>
 #include <qstringlist.h>
-    
+
 #include "decompress.h"
 
 /*
@@ -41,12 +41,12 @@ int main(int argc, const char *argv[])
     QFile inFile;
     QTextStream in(&inFile);
     QTextStream out(stdout);
-    
+
     bool spec = false;
     bool functions = false;
     bool cost = false;
     QStringList args;
-    
+
     // Either read in from stdin or read in from a file
     bool setInput = false;
     for (int i = 1; i < argc; ++i) {
@@ -66,15 +66,17 @@ int main(int argc, const char *argv[])
         } else {
             qWarning() << "Usage:" << argv[0]
                         << "[stdin|callgrindFile]" << "[options]";
-            qWarning() << "-spec type [ob|fl|fn|fe|calls]";
             qWarning() << "-functions file";
             qWarning() << "-cost function";
+            qWarning() << "-spec type [ob|fl|fn|fe|calls]";
             return 1;
         }
     }
     if (!setInput) inFile.open(stdin, QIODevice::ReadOnly);
-    if (inFile.openMode() == QIODevice::NotOpen)
+    if (inFile.openMode() == QIODevice::NotOpen) {
+        qWarning() << "Unable to open callgrind file";
         return 1;
+    }
 
     QStringList seen;
     QStack<QString> currentFile;
@@ -123,7 +125,6 @@ int main(int argc, const char *argv[])
                 }
             }
         }
-        
     } while (!in.atEnd());
     if (cost)
         out << totalCost << endl;
