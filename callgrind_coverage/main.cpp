@@ -172,6 +172,8 @@ int main(int argc, const char **argv)
     else
         out << (int)((touchedConditions/(double)(jumps.count())*2) * 100);
     out << "%" << endl;
+    if (jumps.isEmpty())
+        qWarning() << "No jumps recorded, make sure you use --collect-jumps=yes as a callgrind option.";
     out << endl;
 
     // Path coverage - Has every possible route through a given part of the code been executed?
