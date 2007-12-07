@@ -36,8 +36,8 @@
 class Compiler
 {
 public:
-    Compiler(const QString &file);
-    void loadFile(const QString &file);
+    Compiler();
+    bool loadFile(const QString &file);
     QString file() const { return m_file; }
 
     QList<int> linesTouched(const QString &file);

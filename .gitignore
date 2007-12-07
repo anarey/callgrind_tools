@@ -4,4 +4,5 @@ callgrind_coverage/callgrind_coverage
 callgrind_coverage/qrc_generator.cpp
 callgrind_decompress/callgrind_decompress
 callgrind_info/callgrind_info
+rpp
 rpp/*

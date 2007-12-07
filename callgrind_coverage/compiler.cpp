@@ -58,24 +58,18 @@ public:
   }
 
 protected:
-    virtual void visitIfStatement(IfStatementAST *node)
-    {
-       // p(node);
-       DefaultVisitor::visitIfStatement(node);
-    }
-
     virtual void visit(AST *node)
     {
-      p(node);
-      DefaultVisitor::visit(node);
+        p(node);
+        DefaultVisitor::visit(node);
     }
 
     int p(AST *node)
     {
         if (node) {
-            if (node->kind == AST::Kind_CompoundStatement
-                || node->kind == AST::Kind_StringLiteral)
-                return 0;
+           if (node->kind == AST::Kind_CompoundStatement
+               || node->kind == AST::Kind_StringLiteral)
+               return 0;
           QString filename;
           int line = 0;
           int column = 0;
@@ -173,37 +167,41 @@ static bool preprocess(const QString &sourceFile, QByteArray *out)
     result += sourceFile.toStdString();
     result += "\"\n";
 
-    preprocess.file(sourceInfo.fileName().toStdString(), 
+    preprocess.file(sourceInfo.fileName().toStdString(),
                         rpp::pp_output_iterator<std::string>(result));
 
     *out = QString::fromStdString(result).toUtf8();
     return true;
 }
 
-Compiler::Compiler(const QString &file) : parser(&control)
+Compiler::Compiler() : parser(&control)
 {
-    loadFile(file);
 }
 
-void Compiler::loadFile(const QString &file)
+bool Compiler::loadFile(const QString &file)
 {
     QProcess process;
     QStringList arguments;
     arguments << "-E" << file;
     process.start("gcc", arguments);
     process.waitForFinished();
+    if (process.exitStatus() != QProcess::NormalExit) {
+        qWarning() << process.readAllStandardError();
+        return false;
+    }
     contents = process.readAllStandardOutput();
-
+#if 0
     //if (!preprocess(file, &contents))
     //    return;
-    ast = parser.parse(contents, contents.size(), &__pool);
 
-/*
-    QFile ff(".pp");
+    QFile ff("out.pp");
     ff.open(QFile::WriteOnly);
     ff.write(contents);
     ff.close();
-    */
+#endif
+
+    ast = parser.parse(contents, contents.size(), &__pool);
+    return (ast);
 }
 
 QList<int> Compiler::linesTouched(const QString &file)
@@ -226,3 +224,4 @@ QList<QPair<int, int> > Compiler::functions(const QString &file)
     watcher.run(ast);
     return watcher.functions;
 }
+
