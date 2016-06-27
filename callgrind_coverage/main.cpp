@@ -72,28 +72,15 @@ int main(int argc, const char **argv)
         return 1;
     }
     QFileInfo fileinfo(sourceFile);
-    QString sourceFileName = fileinfo.fileName();
-
-    // For some reason the parser screws up the file name and line number
-    // if the header is part of the preprocessed file.  Copying it to temp
-    // solves that.  Fix if it becomes an issue
-    QTemporaryFile tempFile(QDir::tempPath() + "/XXXXXX_" + sourceFileName);
-    QFile file(sourceFile);
-    if (!tempFile.open() || !file.open(QFile::ReadOnly)) {
-        qWarning() << "Unable to open source file";
-        return 1;
-    }
-    tempFile.write(file.readAll());
-    tempFile.flush();
+    QString sourceFileName = fileinfo.absoluteFilePath();
 
     // Do it!
     CallgrindFile cf(callgrindFile);
     QList<int> touchedLines = cf.linesTouched(sourceFileName);
     QList<CallgrindFile::jump> jumps = cf.jumps(sourceFileName);
 
-    QDir::setCurrent(QFileInfo(tempFile.fileName()).dir().absolutePath());
     Compiler compiler;
-    sourceFileName = QFileInfo(tempFile.fileName()).fileName();
+
     if (!compiler.loadFile(sourceFileName))
         return 1;
     QList<int> compiledLines = compiler.linesTouched(sourceFileName);
