@@ -152,12 +152,12 @@ static bool preprocess(const QString &sourceFile, QByteArray *out)
     QDir::setCurrent(sourceInfo.absolutePath());
 
     preprocess.push_include_path(".");
-    preprocess.push_include_path(QDir::convertSeparators(qtdir).toStdString());
-    preprocess.push_include_path(QDir::convertSeparators(qtdir + "/QtXml").toStdString());
-    preprocess.push_include_path(QDir::convertSeparators(qtdir + "/QtNetwork").toStdString());
-    preprocess.push_include_path(QDir::convertSeparators(qtdir + "/QtCore").toStdString());
-    preprocess.push_include_path(QDir::convertSeparators(qtdir + "/QtGui").toStdString());
-    preprocess.push_include_path(QDir::convertSeparators(qtdir + "/QtOpenGL").toStdString());
+    preprocess.push_include_path(QDir::toNativeSeparators(qtdir).toStdString());
+    preprocess.push_include_path(QDir::toNativeSeparators(qtdir + "/QtXml").toStdString());
+    preprocess.push_include_path(QDir::toNativeSeparators(qtdir + "/QtNetwork").toStdString());
+    preprocess.push_include_path(QDir::toNativeSeparators(qtdir + "/QtCore").toStdString());
+    preprocess.push_include_path(QDir::toNativeSeparators(qtdir + "/QtGui").toStdString());
+    preprocess.push_include_path(QDir::toNativeSeparators(qtdir + "/QtOpenGL").toStdString());
 
     std::string result;
     result.reserve (20 * 1024); // 20K
