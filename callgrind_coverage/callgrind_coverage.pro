@@ -3,7 +3,7 @@
 ######################################################################
 
 TEMPLATE = app
-TARGET = 
+TARGET = cg_coverage
 DEPENDPATH += .
 INCLUDEPATH += .
 
